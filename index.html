@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
+<meta name="theme-color" content="#080b12">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="description" content="Ember Spire — a portrait dungeon crawler for phone and desktop.">
+<title>灰燼の塔 — EMBER SPIRE</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Zen+Maru+Gothic:wght@400;500;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div id="app" class="app">
+
+  <!-- ── top bar ─────────────────────────────────────────────── -->
+  <div class="topbar">
+    <button class="chip" id="btn-language" type="button" data-i18n-title="set.lang">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 3.8 5.7 3.8 9S14.5 18.4 12 21M12 3C9.5 5.6 8.2 8.7 8.2 12S9.5 18.4 12 21"/></svg>
+      <span id="lang-label">JA</span>
+    </button>
+    <div class="wordmark-mini"><span data-i18n="title.a">灰燼の塔</span></div>
+    <div class="topbar-right">
+      <button class="chip" id="btn-sound" type="button" data-i18n-title="set.sound">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h3l4-4v14l-4-4H4z"/><path class="snd-on" d="M15.5 9.2a4 4 0 0 1 0 5.6M18 7a7 7 0 0 1 0 10"/><path class="snd-off" d="M16 9l5 6M21 9l-5 6"/></svg>
+      </button>
+      <button class="chip" id="btn-pause" type="button" data-i18n-title="btn.pause">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5v14M15 5v14"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- ── HUD ─────────────────────────────────────────────────── -->
+  <header class="hud">
+    <div class="hud-line1">
+      <span class="floor-badge" id="floor-badge">B1</span>
+      <span class="lv-badge"><b data-i18n="hud.lv">Lv</b><i id="hud-lv">1</i></span>
+      <span class="spacer"></span>
+      <span class="stat" title="gold"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 8v8M9.5 10h4a1.6 1.6 0 0 1 0 3.2h-3"/></svg><i id="hud-gold">0</i></span>
+      <span class="stat" title="keys"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="8.5" cy="9" r="3.5"/><path d="M11 11l7 7M15.5 15.5l2 2M17.5 13.5l2 2"/></svg><i id="hud-keys">0</i></span>
+    </div>
+
+    <div class="bars">
+      <div class="bar">
+        <span class="bar-k"><b data-i18n="hud.hp">体力</b><i id="hud-hp">34/34</i></span>
+        <span class="bar-track"><i class="fill hp" id="bar-hp"></i></span>
+      </div>
+      <div class="bar">
+        <span class="bar-k"><b data-i18n="hud.mp">魔力</b><i id="hud-mp">12/12</i></span>
+        <span class="bar-track"><i class="fill mp" id="bar-mp"></i></span>
+      </div>
+      <div class="bar thin">
+        <span class="bar-k"><b data-i18n="hud.exp">EXP</b><i id="hud-exp">0/12</i></span>
+        <span class="bar-track"><i class="fill exp" id="bar-exp"></i></span>
+      </div>
+    </div>
+
+    <div class="hud-line2">
+      <span class="gear"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4l6 6-3 3-2-2-7 7-3-3 7-7-2-2z"/></svg><i id="hud-weapon">錆びた剣</i><em id="hud-atk">3</em></span>
+      <span class="gear"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6z"/></svg><i id="hud-armor">布の服</i><em id="hud-def">1</em></span>
+    </div>
+  </header>
+
+  <!-- ── stage ───────────────────────────────────────────────── -->
+  <main class="stage" id="stage">
+    <div class="canvas-wrap" id="canvas-wrap">
+      <canvas id="view" width="300" height="400" aria-label="dungeon view"></canvas>
+      <div class="vignette" aria-hidden="true"></div>
+      <div class="log" id="log"></div>
+      <div class="toast" id="toast"></div>
+    </div>
+  </main>
+
+  <!-- ── controls ────────────────────────────────────────────── -->
+  <footer class="controls">
+    <div class="pad" role="group" aria-label="move">
+      <button class="pad-btn up"    id="dp-up"    type="button" data-dir="0,-1" aria-label="up"><svg viewBox="0 0 24 24"><path d="M12 17V7M7 12l5-5 5 5"/></svg></button>
+      <button class="pad-btn left"  id="dp-left"  type="button" data-dir="-1,0" aria-label="left"><svg viewBox="0 0 24 24"><path d="M17 12H7M12 7l-5 5 5 5"/></svg></button>
+      <button class="pad-btn right" id="dp-right" type="button" data-dir="1,0" aria-label="right"><svg viewBox="0 0 24 24"><path d="M7 12h10M12 7l5 5-5 5"/></svg></button>
+      <button class="pad-btn down"  id="dp-down"  type="button" data-dir="0,1" aria-label="down"><svg viewBox="0 0 24 24"><path d="M12 7v10M7 12l5 5 5-5"/></svg></button>
+    </div>
+
+    <div class="acts">
+      <button class="act act-skill" id="btn-skill" type="button">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3c3 4 5 6 5 9a5 5 0 0 1-10 0c0-2 1-3 2-4 0 2 1 3 2 3 0-3-1-5 1-8z"/></svg>
+        <span><b data-i18n="btn.skill">火の玉</b><small id="skill-cost">MP 6</small></span>
+      </button>
+      <button class="act act-potion" id="btn-potion" type="button">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 3h4M11 3v5l-3.6 7.6A3 3 0 0 0 10.1 20h3.8a3 3 0 0 0 2.7-4.4L13 8V3"/></svg>
+        <span><b data-i18n="btn.potion">薬</b><small id="potion-count">x0</small></span>
+      </button>
+      <button class="act act-rest" id="btn-rest" type="button">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 13.5A8 8 0 1 1 10.5 4a6.5 6.5 0 0 0 9.5 9.5z"/></svg>
+        <span><b data-i18n="btn.rest">休む</b><small>MP +1</small></span>
+      </button>
+    </div>
+  </footer>
+
+  <!-- ── screens ─────────────────────────────────────────────── -->
+  <section class="screen" id="screen-title">
+    <div class="title-art" aria-hidden="true">
+      <svg viewBox="0 0 120 150">
+        <defs>
+          <radialGradient id="glow" cx="50%" cy="42%" r="50%">
+            <stop offset="0%" stop-color="#ffd166" stop-opacity=".95"/>
+            <stop offset="45%" stop-color="#ff8f3c" stop-opacity=".35"/>
+            <stop offset="100%" stop-color="#ff8f3c" stop-opacity="0"/>
+          </radialGradient>
+        </defs>
+        <circle cx="60" cy="62" r="58" fill="url(#glow)"/>
+        <path d="M60 12v10M46 20l4 8M74 20l-4 8" stroke="#f0c65a" stroke-width="3" stroke-linecap="round" fill="none"/>
+        <rect x="42" y="30" width="36" height="10" rx="3" fill="#2a3546"/>
+        <path d="M46 40h28l4 52a6 6 0 0 1-6 6H48a6 6 0 0 1-6-6z" fill="#1b2634" stroke="#42546c" stroke-width="2"/>
+        <path d="M52 48h16l2 40H50z" fill="#ffb64d" opacity=".85"/>
+        <path d="M60 54c5 7 8 11 8 16a8 8 0 0 1-16 0c0-4 2-6 4-8 0 4 2 5 3 5 1-5-1-8 1-13z" fill="#fff3c4"/>
+        <rect x="40" y="98" width="40" height="9" rx="3" fill="#2a3546"/>
+      </svg>
+    </div>
+    <h1 class="game-title" data-i18n="title.a">灰燼の塔</h1>
+    <p class="game-sub"><span class="latin" data-i18n="title.b">EMBER SPIRE</span></p>
+    <p class="game-tag" data-i18n="title.tag">塔の底には、消えた灯が眠る。</p>
+    <p class="title-best" id="title-best"></p>
+
+    <div class="menu">
+      <button class="btn btn-primary" id="btn-new" type="button"><span data-i18n="menu.new">新たな冒険</span></button>
+      <button class="btn" id="btn-cont" type="button"><span data-i18n="menu.cont">続きから</span></button>
+      <div class="menu-row">
+        <button class="btn small" id="btn-help" type="button"><span data-i18n="menu.help">遊び方</span></button>
+        <button class="btn small" id="btn-records" type="button"><span data-i18n="menu.records">記録</span></button>
+        <button class="btn small" id="btn-settings" type="button"><span data-i18n="menu.settings">設定</span></button>
+      </div>
+    </div>
+
+    <div class="lang-switch" id="lang-switch-title"></div>
+    <p class="hint" data-i18n="set.hint">進行は端末内に自動保存されます</p>
+  </section>
+
+  <section class="screen hidden" id="screen-pause">
+    <div class="panel">
+      <h2 data-i18n="pause.title">ポーズ</h2>
+      <p class="panel-turn"><span data-i18n="hud.turn">ターン</span> <b id="pause-turn">0</b> · <span data-i18n="hud.floor">B{n}階</span> <b id="pause-floor">1</b></p>
+      <button class="btn btn-primary" id="btn-resume" type="button"><span data-i18n="pause.resume">再開</span></button>
+      <button class="btn" id="btn-save" type="button"><span data-i18n="pause.save">今セーブする</span></button>
+      <div class="menu-row">
+        <button class="btn small" id="btn-pause-help" type="button"><span data-i18n="pause.help">遊び方</span></button>
+        <button class="btn small" id="btn-pause-settings" type="button"><span data-i18n="pause.settings">設定</span></button>
+      </div>
+      <button class="btn ghost" id="btn-quit" type="button"><span data-i18n="pause.titleBtn">タイトルへ</span></button>
+      <div class="lang-switch" id="lang-switch-pause"></div>
+    </div>
+  </section>
+
+  <section class="screen hidden" id="screen-settings">
+    <div class="panel">
+      <h2 data-i18n="menu.settings">設定</h2>
+
+      <div class="field">
+        <span class="field-k" data-i18n="set.sound">サウンド</span>
+        <button class="switch" id="btn-sound-2" type="button"><i></i><b id="sound-state">ON</b></button>
+      </div>
+
+      <div class="field column">
+        <span class="field-k" data-i18n="set.lang">言語 / Language</span>
+        <div class="lang-switch" id="lang-switch-settings"></div>
+      </div>
+
+      <div class="field column">
+        <span class="field-k" data-i18n="set.data">セーブデータ</span>
+        <p class="field-note" id="save-info">—</p>
+        <button class="btn small danger" id="btn-delete" type="button"><span data-i18n="set.del">データを削除</span></button>
+      </div>
+
+      <p class="field-note dim" data-i18n="set.hint">進行は端末内に自動保存されます</p>
+      <button class="btn btn-primary" id="btn-settings-close" type="button"><span data-i18n="common.close">閉じる</span></button>
+    </div>
+  </section>
+
+  <section class="screen hidden" id="screen-help">
+    <div class="panel scroll">
+      <h2 data-i18n="help.title">遊び方</h2>
+      <div class="help-block"><h3 data-i18n="help.h1">移動</h3><p data-i18n="help.t1"></p></div>
+      <div class="help-block"><h3 data-i18n="help.h2">戦闘</h3><p data-i18n="help.t2"></p></div>
+      <div class="help-block"><h3 data-i18n="help.h3">探索</h3><p data-i18n="help.t3"></p></div>
+      <div class="help-block"><h3 data-i18n="help.h4">目標</h3><p data-i18n="help.t4"></p></div>
+      <div class="keycaps">
+        <span><kbd>← ↑ → ↓</kbd> / <kbd>W A S D</kbd></span>
+        <span><kbd>Space</kbd> <span data-i18n="btn.rest">休む</span></span>
+        <span><kbd>F</kbd> <span data-i18n="btn.skill">火の玉</span></span>
+        <span><kbd>Q</kbd> <span data-i18n="btn.potion">薬</span></span>
+        <span><kbd>Esc</kbd> <span data-i18n="btn.pause">メニュー</span></span>
+      </div>
+      <button class="btn btn-primary" id="btn-help-close" type="button"><span data-i18n="common.close">閉じる</span></button>
+    </div>
+  </section>
+
+  <section class="screen hidden" id="screen-records">
+    <div class="panel">
+      <h2 data-i18n="rec.title">冒険の記録</h2>
+      <dl class="recs" id="recs">
+        <div><dt data-i18n="rec.best">最も深く進んだ階層</dt><dd id="rec-best">—</dd></div>
+        <div><dt data-i18n="rec.deepest">最期の階層</dt><dd id="rec-deepest">—</dd></div>
+        <div><dt data-i18n="rec.runs">挑戦回数</dt><dd id="rec-runs">0</dd></div>
+        <div><dt data-i18n="rec.kills">討伐数</dt><dd id="rec-kills">0</dd></div>
+        <div><dt data-i18n="rec.gold">累計ゴールド</dt><dd id="rec-gold">0</dd></div>
+      </dl>
+      <p class="field-note dim hidden" id="recs-empty" data-i18n="rec.none">まだ記録はありません</p>
+      <button class="btn btn-primary" id="btn-records-close" type="button"><span data-i18n="common.close">閉じる</span></button>
+    </div>
+  </section>
+
+  <section class="screen hidden" id="screen-death">
+    <div class="panel result bad">
+      <p class="result-mark" aria-hidden="true">✦</p>
+      <h2 data-i18n="over.dTitle">灯が消えた</h2>
+      <p class="result-body" id="death-body"></p>
+      <div class="result-stats" id="death-stats"></div>
+      <button class="btn btn-primary" id="btn-retry" type="button"><span data-i18n="over.retry">もう一度挑む</span></button>
+      <button class="btn ghost" id="btn-death-title" type="button"><span data-i18n="over.toTitle">タイトルへ</span></button>
+    </div>
+  </section>
+
+  <section class="screen hidden" id="screen-victory">
+    <div class="panel result good">
+      <p class="result-mark" aria-hidden="true">✧</p>
+      <h2 data-i18n="over.vTitle">塔の宝</h2>
+      <p class="result-body" id="victory-body"></p>
+      <div class="result-stats" id="victory-stats"></div>
+      <button class="btn btn-primary" id="btn-deeper" type="button"><span data-i18n="over.deeper">さらに深く</span></button>
+      <button class="btn ghost" id="btn-retire" type="button"><span data-i18n="over.retire">冒険を終える</span></button>
+    </div>
+  </section>
+
+  <section class="screen hidden confirm" id="screen-confirm">
+    <div class="panel narrow">
+      <p data-i18n="set.delSure">セーブデータと記録を消しますか？</p>
+      <div class="menu-row">
+        <button class="btn danger" id="btn-confirm-yes" type="button"><span data-i18n="set.del">データを削除</span></button>
+        <button class="btn" id="btn-confirm-no" type="button"><span data-i18n="common.back">もどる</span></button>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script src="assets/i18n.js"></script>
+<script src="assets/sprites.js"></script>
+<script src="assets/rules.js"></script>
+<script src="assets/dungeon.js"></script>
+<script src="assets/audio.js"></script>
+<script src="assets/game.js"></script>
+</body>
+</html>
