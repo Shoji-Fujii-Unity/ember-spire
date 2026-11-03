@@ -115,6 +115,11 @@ body {
 .bar-track { display: block; height: 7px; border-radius: 4px; background: rgba(255, 255, 255, .07); overflow: hidden; box-shadow: 0 1px 0 rgba(0, 0, 0, .5) inset; }
 .fill { display: block; height: 100%; border-radius: 4px; transition: width .22s ease; }
 .fill.hp { background: linear-gradient(90deg, #e2455c, #ff8a5c); }
+.fill.hp.low { animation: hp-low 0.95s ease-in-out infinite; }
+@keyframes hp-low {
+  0%, 100% { filter: brightness(1); box-shadow: 0 0 0 rgba(255, 82, 109, 0); }
+  50% { filter: brightness(1.45); box-shadow: 0 0 10px rgba(255, 82, 109, .8); }
+}
 .fill.mp { background: linear-gradient(90deg, #3f7fd6, #63d8e0); }
 .fill.exp { background: linear-gradient(90deg, #7a6a3a, #f0c65a); }
 

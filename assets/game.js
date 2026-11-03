@@ -26,8 +26,10 @@
   var viewSeed = 20261030;       // stable seed for tile shading (survives S being null)
   var lit = {}, seen = {};       // visibility sets keyed by tile index
   var fx = [];                   // transient visual effects
+  var embers = [];               // lantern motes drifting around the hero
+  var idleFx = [];               // attract-mode embers behind the title
   var cam = { x: 0, y: 0 };
-  var shake = 0, hurtFlash = 0;
+  var shake = 0, hurtFlash = 0, goldFlash = 0;
   var walk = null;               // auto-walk queue
   var paused = true, over = false;
   var canvas, ctx, TS = 24, dpr = 1, viewW = 0, viewH = 0;
@@ -93,7 +95,7 @@
     S.w = gen.w; S.h = gen.h;
     S.tiles = gen.tiles;
     S.items = []; S.mon = []; S.traps = [];
-    seen = {}; lit = {};
+    seen = {}; lit = {}; embers = [];
 
     var sealed = {};
     for (var q = 0; q < gen.sealed.length; q++) sealed[gen.sealed[q][0] + ',' + gen.sealed[q][1]] = 1;
@@ -252,9 +254,11 @@
     var crit = label !== 'bolt' && rand() < Rules.critChance(S.p.lvl);
     if (crit) dmg = Math.round(dmg * 1.6);
     m.hp -= dmg;
+    m.flash = timeMs;
     addFx('float', m.x, m.y, '-' + dmg, crit ? '#ffd166' : '#ffe6e6');
     addFx('spark', m.x, m.y, crit ? '#ffd166' : '#ff8f6a');
     shake = Math.max(shake, crit ? 6 : 3);
+    if (crit) goldFlash = 1;
     snd.play(crit ? 'crit' : (label === 'bolt' ? 'boom' : 'hit'));
     say(crit ? 'msg.crit' : 'msg.hit', { name: t('mon.' + m.t), n: dmg }, 'good');
     if (m.hp <= 0) killMonster(m);
@@ -309,6 +313,7 @@
 
   function die(m) {
     over = true; paused = true;
+    snd.setDanger(false);
     snd.play('death');
     commitRun('death');
     clearSave();
@@ -330,6 +335,7 @@
     if (isGoal) {
       commitRun('win');
       over = true; paused = true;
+      snd.setDanger(false);
       $('victory-body').textContent = t('over.vBody', { f: S.floor });
       $('victory-stats').innerHTML =
         statBox('hud.lv', S.p.lvl) + statBox('rec.kills', S.kills) + statBox('hud.gold', S.goldFound);
@@ -380,7 +386,8 @@
     if (it.mimic) {
       it.mimic = 'done';
       say('msg.mimicReveal', null, 'bad');
-      snd.play('spawn');
+      snd.play('mimic');
+      shake = Math.max(shake, 5);
       var m = Rules.spawn('mimic', S.floor, it.x, it.y);
       drop(it);
       S.mon.push(m);
@@ -490,7 +497,16 @@
     S.turn++;
     monsterPhase();
     if (S.p.hp <= 0) { hud(); return; }
+    var wasLit = {};
+    for (var q = 0; q < S.mon.length; q++) wasLit[q] = !!lit[idx(S.mon[q].x, S.mon[q].y)];
     updateLight();
+    // something stepping into the lantern light announces itself
+    for (var n = 0; n < S.mon.length; n++) {
+      if (wasLit[n] || !lit[idx(S.mon[n].x, S.mon[n].y)]) continue;
+      var def = Rules.MONSTERS[S.mon[n].t];
+      if (def.boss && !S.bossHeard) { S.bossHeard = true; snd.play('boss'); break; }
+      if (!def.boss && rand() < 0.4) { snd.play('growl'); break; }
+    }
     if (S.turn % 8 === 0 && S.p.mp < S.p.maxmp) S.p.mp++;
     hud();
     if (S.turn % 4 === 0) save();
@@ -521,7 +537,7 @@
     }
 
     var m = monAt(nx, ny);
-    if (m) { hitMonster(m, 1); endTurn(); hud(); return true; }
+    if (m) { snd.play('whoosh'); hitMonster(m, 1); endTurn(); hud(); return true; }
 
     // A chest is opened from where you stand — a hidden mimic keeps its ground.
     var chest = itemAt(nx, ny);
@@ -531,6 +547,7 @@
       return true;
     }
 
+    addFx('puff', S.p.x, S.p.y, '#9c8a70');
     S.p.x = nx; S.p.y = ny;
     snd.play('move');
 
@@ -672,6 +689,7 @@
     $('hud-atk').textContent = Rules.playerAtk(p);
     $('hud-def').textContent = Rules.playerDef(p);
     $('bar-hp').style.width = (100 * p.hp / p.maxhp) + '%';
+    $('bar-hp').classList.toggle('low', p.hp > 0 && p.hp / p.maxhp <= 0.25);
     $('bar-mp').style.width = (100 * p.mp / p.maxmp) + '%';
     $('bar-exp').style.width = (100 * p.exp / Rules.expNext(p.lvl)) + '%';
     $('potion-count').textContent = 'x' + p.potions;
@@ -680,6 +698,7 @@
     $('btn-potion').classList.toggle('is-disabled', p.potions <= 0);
     $('pause-turn').textContent = S.turn;
     $('pause-floor').textContent = S.floor;
+    snd.setDanger(p.hp > 0 && p.hp / p.maxhp <= 0.25);
   }
 
   /* ── screens ───────────────────────────────────────────────── */
@@ -747,7 +766,7 @@
       }
       localStorage.setItem(SAVE_KEY, JSON.stringify({
         v: VERSION, floor: S.floor, turn: S.turn, seed: S.seed, rng: S.rng,
-        kills: S.kills, goldFound: S.goldFound,
+        kills: S.kills, goldFound: S.goldFound, bossHeard: S.bossHeard || false,
         p: S.p, tiles: S.tiles, seen: seenRows,
         items: S.items, mon: S.mon, traps: S.traps
       }));
@@ -772,7 +791,7 @@
     if (!s) { toast(t('toast.noSave')); return false; }
     S = {
       seed: s.seed, rng: s.rng, floor: s.floor, turn: s.turn,
-      kills: s.kills || 0, goldFound: s.goldFound || 0,
+      kills: s.kills || 0, goldFound: s.goldFound || 0, bossHeard: !!s.bossHeard,
       p: s.p, tiles: s.tiles, items: s.items || [], mon: s.mon || [], traps: s.traps || [],
       w: s.tiles[0].length, h: s.tiles.length
     };
@@ -781,7 +800,7 @@
       var row = s.seen && s.seen[y] ? s.seen[y] : '';
       for (var x = 0; x < S.w; x++) if (row.charAt(x) === '1') seen[y * S.w + x] = 1;
     }
-    over = false; paused = false; walk = null; fx = [];
+    over = false; paused = false; walk = null; fx = []; embers = [];
     viewSeed = (S.seed >>> 0) ^ (S.floor * 2654435761);
     cam.x = clampCam(S.p.x - VW / 2, S.w - VW);
     cam.y = clampCam(S.p.y - VH / 2, S.h - VH);
@@ -897,14 +916,18 @@
       if (!seen[idx(it.x, it.y)]) continue;
       drawItem(it, camPx, ox, oy);
     }
+    var WHITE = { o: '#ffffff', h: '#ffffff', w: '#ffffff', k: '#ffffff', c: '#ffffff', l: '#ffffff', b: '#ffffff', d: '#ffffff', a: '#ffffff', y: '#ffffff' };
     for (var n = 0; n < S.mon.length; n++) {
       var m = S.mon[n];
       if (!lit[idx(m.x, m.y)]) continue;
       var mx = Math.round(m.x * TS - camPx + ox), my = Math.round(m.y * TS - cam.y * TS + oy);
       var def = Rules.MONSTERS[m.t];
-      drawGroundShadow(mx, my, 0.72, 0.34);
+      var floaty = def.shape === 'bat' || def.shape === 'wraith' || def.shape === 'dragon';
+      var mbob = Math.round(Math.sin(now / (floaty ? 400 : 620) + m.x * 7 + m.y * 13) * (floaty ? 2 : 1));
+      drawGroundShadow(mx, my, 0.72 - mbob * 0.04, 0.34 - mbob * 0.03);
       if (def.boss) drawGlow(mx + TS / 2, my + TS / 2, 'rgba(255,91,67,.3)', TS * 1.5);
-      Sprites.draw(ctx, def.shape, mx, my, TS, def.pal, m.t);
+      var flashing = m.flash !== undefined && now - m.flash < 130;
+      Sprites.draw(ctx, def.shape, mx, my + mbob, TS, flashing ? WHITE : def.pal, flashing ? m.t + '-flash' : m.t);
       if (m.hp < m.maxhp) {
         var bw = TS - 8;
         ctx.fillStyle = 'rgba(0,0,0,.55)';
@@ -931,14 +954,60 @@
     drawGroundShadow(px, py, 0.62, 0.42);
     Sprites.draw(ctx, 'hero', px, py + bob, TS, null, 'hero');
 
+    drawEmbers(dt, camPx, ox, oy);
     drawFx(dt, camPx, ox, oy);
 
+    if (goldFlash > 0) {
+      ctx.fillStyle = 'rgba(255,209,102,' + (goldFlash * 0.13) + ')';
+      ctx.fillRect(0, 0, viewW, viewH);
+      goldFlash = Math.max(0, goldFlash - dt * 0.005);
+    }
     if (hurtFlash > 0) {
       ctx.fillStyle = 'rgba(190,40,60,' + (hurtFlash * 0.28) + ')';
       ctx.fillRect(0, 0, viewW, viewH);
       hurtFlash = Math.max(0, hurtFlash - dt * 0.004);
     }
+    // vignette keeps the edges heavy so the lantern pool reads as the safe centre
+    var vg = ctx.createRadialGradient(viewW / 2, viewH / 2, Math.min(viewW, viewH) * 0.44, viewW / 2, viewH / 2, Math.max(viewW, viewH) * 0.74);
+    vg.addColorStop(0, 'rgba(0,0,0,0)');
+    vg.addColorStop(1, 'rgba(2,3,8,.4)');
+    ctx.fillStyle = vg;
+    ctx.fillRect(0, 0, viewW, viewH);
     drawMinimap();
+  }
+
+  /* Slow warm motes that wander inside the lantern light. */
+  function spawnEmber(anyAge) {
+    var ang = Math.random() * 6.283, r = Math.random() * (LIGHT_R - 1);
+    return {
+      x: S.p.x + 0.5 + Math.cos(ang) * r,
+      y: S.p.y + 0.5 + Math.sin(ang) * r,
+      vy: 0.0018 + Math.random() * 0.0022,
+      ph: Math.random() * 6000,
+      age: anyAge ? Math.random() * 3000 : 0,
+      life: 2600 + Math.random() * 2600
+    };
+  }
+
+  function drawEmbers(dt, camPx, ox, oy) {
+    while (embers.length < 12) embers.push(spawnEmber(true));
+    for (var i = 0; i < embers.length; i++) {
+      var e = embers[i];
+      e.age += dt;
+      e.y -= e.vy * dt;
+      e.x += Math.sin((timeMs + e.ph) / 700) * dt * 0.0006;
+      if (e.age >= e.life) { embers[i] = spawnEmber(false); continue; }
+      var tx = Math.floor(e.x), ty = Math.floor(e.y);
+      if (!inMap(tx, ty) || !lit[idx(tx, ty)]) continue;
+      var p = e.age / e.life;
+      var a = 0.55 * Math.sin(Math.PI * p) * (0.6 + 0.4 * Math.sin((timeMs + e.ph) / 160));
+      if (a <= 0.02) continue;
+      ctx.globalAlpha = a;
+      ctx.fillStyle = p < 0.4 ? '#ffd166' : '#ff8a4d';
+      var sz = TS >= 24 ? 2 : 1;
+      ctx.fillRect(Math.round(e.x * TS - camPx + ox), Math.round(e.y * TS - cam.y * TS + oy), sz, sz);
+      ctx.globalAlpha = 1;
+    }
   }
 
   function drawIdle() {
@@ -959,6 +1028,22 @@
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, viewW, viewH);
     Sprites.draw(ctx, 'hero', Math.round(cxp - TS / 2), Math.round(cyp - TS / 2) + Math.round(Math.sin(timeMs / 700) * 2), TS, null, 'idle');
+    // embers rising through the dark
+    var dt2 = Math.min(50, timeMs - (idleFx.t || timeMs)); idleFx.t = timeMs;
+    while (idleFx.length < 16) {
+      idleFx.push({ x: Math.random(), y: Math.random(), v: 0.00004 + Math.random() * 0.00008, ph: Math.random() * 6000 });
+    }
+    for (var i = 0; i < idleFx.length; i++) {
+      var e = idleFx[i];
+      e.y -= e.v * dt2;
+      if (e.y < -0.05) { e.y = 1.05; e.x = Math.random(); }
+      var tw = 0.35 + 0.3 * Math.sin((timeMs + e.ph) / 300);
+      ctx.globalAlpha = Math.max(0, tw);
+      ctx.fillStyle = '#ffb064';
+      var ex = Math.round(e.x * viewW + Math.sin((timeMs + e.ph) / 900) * 6);
+      ctx.fillRect(ex, Math.round(e.y * viewH), 2, 2);
+      ctx.globalAlpha = 1;
+    }
   }
 
   function rand01(seed) {
@@ -997,6 +1082,14 @@
       if (top && isLit) {
         ctx.fillStyle = 'rgba(255,231,193,.1)';
         ctx.fillRect(sx, sy, TS, 2);
+        // sparse wall torches bring the stonework alive
+        if (hash2(tx, ty, 53) > 0.86) {
+          var fl = Math.sin(timeMs / 118 + tx * 2.1) * 0.6 + Math.sin(timeMs / 53 + ty * 1.7) * 0.4;
+          drawGlow(sx + TS / 2, sy + TS * 0.34, 'rgba(255,150,60,' + (0.13 + 0.045 * fl).toFixed(3) + ')', TS * 1.35);
+          ctx.fillStyle = '#3a2a18';
+          ctx.fillRect(Math.round(sx + TS / 2 - 1.5), Math.round(sy + TS * 0.5), 3, Math.round(TS * 0.16));
+          Sprites.draw(ctx, 'fire', Math.round(sx + TS * 0.24), Math.round(sy + TS * 0.1 + fl), Math.round(TS * 0.52), null, 'torch', 0.96);
+        }
       }
       return;
     }
@@ -1115,8 +1208,23 @@
         ctx.arc(sx + TS / 2, sy + TS / 2, TS * (0.5 + p * 0.5), 0, 6.283);
         ctx.fill();
         ctx.globalAlpha = 1;
+      } else if (f.kind === 'puff') {
+        ctx.globalAlpha = (1 - p) * 0.32;
+        ctx.fillStyle = f.c;
+        for (var a2 = 0; a2 < 3; a2++) {
+          var ang2 = a2 * 2.1 + 0.6;
+          var r2 = TS * (0.08 + p * 0.3);
+          ctx.fillRect(sx + TS / 2 + Math.cos(ang2) * r2 - 1.5, sy + TS * 0.72 + Math.sin(ang2) * r2 * 0.35 - 1.5, 3, 3);
+        }
+        ctx.globalAlpha = 1;
       } else if (f.kind === 'bolt') {
         var bx = sx + (f.x2 - f.x) * TS * p, by = sy + (f.y2 - f.y) * TS * p;
+        for (var tr = 3; tr >= 1; tr--) {
+          var tp = p - tr * 0.11;
+          if (tp <= 0) continue;
+          Sprites.draw(ctx, 'fire', sx + (f.x2 - f.x) * TS * tp, sy + (f.y2 - f.y) * TS * tp,
+            Math.round(TS * (0.75 - tr * 0.14)), null, 'fx', (0.34 / tr) * (1 - p));
+        }
         Sprites.draw(ctx, 'fire', bx, by, Math.round(TS * 0.75), null, 'fx', 1);
         ctx.globalAlpha = (1 - p) * 0.5;
         ctx.fillStyle = f.c;
